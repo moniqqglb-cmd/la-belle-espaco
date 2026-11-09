@@ -1,5 +1,7 @@
 "use client";
+
 import { useState } from "react";
+
 const servicos = [
   { nome: "Drenagem linfática", preco: "R$ 119,99", categoria: "Corporal" },
   { nome: "Massagem modeladora", preco: "R$ 139,99", categoria: "Corporal" },
@@ -21,11 +23,30 @@ const servicos = [
   { nome: "Depilação a laser", preco: "Consulte", categoria: "Corporal" },
   { nome: "Enzimas", preco: "Consulte", categoria: "Corporal" },
 ];
+
 const horarios = [
   "08:00", "09:00", "10:00", "11:00",
   "12:00", "13:00", "14:00", "15:00",
   "16:00", "17:00", "18:00", "19:00",
 ];
+
+function converterPreco(preco: string) {
+  const valor = preco.match(/R\$\s*([\d.]+,\d{2})/);
+
+  if (!valor) return 0;
+
+  return Number(
+    valor[1].replace(/\./g, "").replace(",", ".")
+  );
+}
+
+function moeda(valor: number) {
+  return valor.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
 export default function Home() {
   const [servico, setServico] = useState("");
   const [profissional, setProfissional] = useState("");
@@ -33,24 +54,27 @@ export default function Home() {
   const [horario, setHorario] = useState("");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
+
   const escolhido = servicos.find((s) => s.nome === servico);
   const injetavel = escolhido?.categoria === "Injetáveis";
+
   const precoNumerico = escolhido
-    ? Number(
-        escolhido.preco
-          .replace("R$ ", "")
-          .replace(/\./g, "")
-          .replace(",", ".")
-          .split(" ")[0]
-      )
+    ? converterPreco(escolhido.preco)
     : 0;
+
   const permiteParcelamento = precoNumerico > 200;
+
+  const valorParcela = permiteParcelamento
+    ? Math.round((precoNumerico / 10) * 100) / 100
+    : 0;
+
   function enviarAgendamento(e: React.FormEvent) {
     e.preventDefault();
     alert(
       "Esta é uma prévia do site. A integração com Google Agenda e pagamentos será ativada nas próximas etapas."
     );
   }
+
   return (
     <main className="min-h-screen bg-[#faf7f2] text-[#44352d]">
       <header className="bg-[#30251f] px-6 py-8 text-center text-white">
@@ -67,6 +91,7 @@ export default function Home() {
           Sua beleza merece esse cuidado.
         </p>
       </header>
+
       <section className="mx-auto max-w-4xl px-5 py-12 text-center">
         <p className="text-xs tracking-[0.3em] text-[#a17c48]">
           SEJA BEM-VINDA
@@ -79,6 +104,7 @@ export default function Home() {
           Nosso espaço está preparado para cuidar de você.
         </p>
       </section>
+
       <section className="mx-auto max-w-4xl px-5 pb-16">
         <form
           onSubmit={enviarAgendamento}
@@ -87,7 +113,11 @@ export default function Home() {
           <h3 className="mb-6 text-center text-2xl font-light">
             Faça seu agendamento
           </h3>
-          <label className="mb-2 block text-sm">1. Escolha o procedimento</label>
+
+          <label className="mb-2 block text-sm">
+            1. Escolha o procedimento
+          </label>
+
           <select
             required
             value={servico}
@@ -101,20 +131,44 @@ export default function Home() {
               </option>
             ))}
           </select>
+
           {escolhido && (
             <div className="mb-6 rounded-lg bg-[#f8f3eb] p-4 text-sm">
               <p>Procedimento: {escolhido.nome}</p>
-              <p className="mt-1 font-semibold text-[#987343]">
-                Valor: {escolhido.preco}
-              </p>
-              {permiteParcelamento && (
+
+              {permiteParcelamento ? (
+                <div className="mt-3">
+                  <p className="text-xs tracking-widest text-[#806f63]">
+                    PARCELAMENTO NO CARTÃO
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold text-[#987343]">
+                    10x de aproximadamente {moeda(valorParcela)}
+                  </p>
+
+                  <p className="mt-1 font-semibold text-[#987343]">
+                    SEM JUROS
+                  </p>
+
+                  <p className="mt-2 text-xs text-[#806f63]">
+                    Valor total: {escolhido.preco}
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#806f63]">
+                    A última parcela poderá ter ajuste de centavos.
+                  </p>
+                </div>
+              ) : (
                 <p className="mt-2 font-semibold text-[#987343]">
-                  Consulte as opções de parcelamento no cartão.
+                  Valor: {escolhido.preco}
                 </p>
               )}
-              <p className="mt-1 text-[#806f63]">
-                Duração prevista: {servico === "Limpeza de pele" ? "1h50" : "1 hora"}
+
+              <p className="mt-3 text-[#806f63]">
+                Duração prevista:{" "}
+                {servico === "Limpeza de pele" ? "1h50" : "1 hora"}
               </p>
+
               {injetavel && (
                 <p className="mt-2 text-[#806f63]">
                   Sinal de 20% para confirmação. O valor será abatido
@@ -123,7 +177,11 @@ export default function Home() {
               )}
             </div>
           )}
-          <label className="mb-2 block text-sm">2. Escolha a profissional</label>
+
+          <label className="mb-2 block text-sm">
+            2. Escolha a profissional
+          </label>
+
           <select
             required
             value={profissional}
@@ -131,12 +189,22 @@ export default function Home() {
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           >
             <option value="">Selecione a profissional</option>
-            {(!servico || servico === "Drenagem linfática" || servico === "Massagem modeladora") && (
+
+            {(!servico ||
+              servico === "Drenagem linfática" ||
+              servico === "Massagem modeladora") && (
               <option value="Beatriz">Beatriz</option>
             )}
-            <option value="Dra. Monique Gomes">Dra. Monique Gomes</option>
+
+            <option value="Dra. Monique Gomes">
+              Dra. Monique Gomes
+            </option>
           </select>
-          <label className="mb-2 block text-sm">3. Escolha a data</label>
+
+          <label className="mb-2 block text-sm">
+            3. Escolha a data
+          </label>
+
           <input
             required
             type="date"
@@ -148,7 +216,11 @@ export default function Home() {
             }}
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           />
-          <label className="mb-3 block text-sm">4. Escolha o horário</label>
+
+          <label className="mb-3 block text-sm">
+            4. Escolha o horário
+          </label>
+
           <div className="mb-6 grid grid-cols-3 gap-2 sm:grid-cols-4">
             {horarios.map((h) => (
               <button
@@ -165,7 +237,11 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <label className="mb-2 block text-sm">5. Seu nome</label>
+
+          <label className="mb-2 block text-sm">
+            5. Seu nome
+          </label>
+
           <input
             required
             value={nome}
@@ -173,7 +249,11 @@ export default function Home() {
             placeholder="Digite seu nome completo"
             className="mb-5 w-full rounded-lg border border-[#dfd4c8] p-3"
           />
-          <label className="mb-2 block text-sm">Seu WhatsApp</label>
+
+          <label className="mb-2 block text-sm">
+            Seu WhatsApp
+          </label>
+
           <input
             required
             value={telefone}
@@ -181,6 +261,7 @@ export default function Home() {
             placeholder="(00) 00000-0000"
             className="mb-7 w-full rounded-lg border border-[#dfd4c8] p-3"
           />
+
           <button
             type="submit"
             disabled={!servico || !profissional || !data || !horario}
@@ -188,6 +269,7 @@ export default function Home() {
           >
             CONTINUAR AGENDAMENTO
           </button>
+
           <p className="mt-5 text-center text-xs leading-5 text-[#98877a]">
             Atendimento de terça a sábado, das 08h às 20h.
             <br />
@@ -195,6 +277,7 @@ export default function Home() {
           </p>
         </form>
       </section>
+
       <footer className="bg-[#30251f] px-5 py-8 text-center text-sm text-[#eee2d5]">
         <p className="tracking-widest">LA BELLE ESPAÇO</p>
         <p className="mt-2 text-xs text-[#c9b9a8]">
