@@ -3,12 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get("code");
+    const state = request.nextUrl.searchParams.get("state");
+    const savedState = request.cookies.get("google_oauth_state")?.value;
     const error = request.nextUrl.searchParams.get("error");
 
     if (error || !code) {
       return NextResponse.json(
         { erro: "Autorização do Google não recebida." },
         { status: 400 }
+      );
+    }
+
+    if (!state || !savedState || state !== savedState) {
+      return NextResponse.json(
+        { erro: "Validação de segurança falhou. Tente novamente." },
+        { status: 403 }
       );
     }
 
@@ -34,18 +43,9 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json();
 
-    if (!tokenResponse.ok) {
+    if (!tokenResponse.ok || !tokens.refresh_token) {
       return NextResponse.json(
-        { erro: "Falha ao obter autorização do Google.", detalhes: tokens },
-        { status: 400 }
-      );
-    }
-
-    if (!tokens.refresh_token) {
-      return NextResponse.json(
-        {
-          erro: "O Google não forneceu um refresh token. Será necessário autorizar novamente.",
-        },
+        { erro: "Não foi possível obter a autorização permanente." },
         { status: 400 }
       );
     }
@@ -75,9 +75,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       new URL("/?google=conectado", request.url)
     );
+
+    response.cookies.delete("google_oauth_state");
+
+    return response;
   } catch {
     return NextResponse.json(
       { erro: "Erro interno ao conectar o Google Agenda." },
