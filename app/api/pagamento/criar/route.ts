@@ -272,10 +272,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           order_nsu: orderNsu,
           redirect_url: "https://la-belle-espaco-uz8o.vercel.app",
-          webhook: {
-            url: "https://la-belle-espaco-uz8o.vercel.app/api/pagamento/webhook",
-            events: ["paid", "refunded", "canceled"],
-          },
+          webhook_url: "https://la-belle-espaco-uz8o.vercel.app/api/pagamento/webhook",
           items: [
             {
               quantity: 1,
