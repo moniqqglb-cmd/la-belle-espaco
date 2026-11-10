@@ -41,6 +41,7 @@ export default function Home() {
 
   const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(false);
+  const [pagando, setPagando] = useState(false);
   const [erroAgenda, setErroAgenda] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sucesso, setSucesso] = useState(false);
@@ -110,9 +111,13 @@ export default function Home() {
     return () => controller.abort();
   }, [data, servico, profissional, duracao]);
 
-  function enviarAgendamento(e: FormEvent<HTMLFormElement>) {
+  async function enviarAgendamento(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (pagando) return;
+
     setSucesso(false);
+    setMensagem("");
 
     if (!escolhido) {
       setMensagem("Escolha um procedimento.");
@@ -126,9 +131,60 @@ export default function Home() {
       return;
     }
 
-    setMensagem(
-      `O sinal de ${moeda(sinal)} é obrigatório para reservar este horário. A integração de pagamento ainda está sendo configurada. Nenhum agendamento foi registrado.`
-    );
+    if (!horario || !data || !nome.trim() || !telefone.trim()) {
+      setMensagem("Preencha todos os dados e escolha um horário.");
+      return;
+    }
+
+    setPagando(true);
+    setMensagem("Preparando sua cobrança na InfinitePay...");
+
+    try {
+      const resposta = await fetch("/api/pagamento/criar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nome: nome.trim(),
+          telefone: telefone.trim(),
+          servico,
+          profissional,
+          data,
+          horario,
+        }),
+      });
+
+      const resultado = await resposta.json();
+
+      if (!resposta.ok) {
+        throw new Error(
+          resultado.erro || "Não foi possível criar a cobrança."
+        );
+      }
+
+      if (
+        !resultado.link_pagamento ||
+        typeof resultado.link_pagamento !== "string"
+      ) {
+        throw new Error("A InfinitePay não retornou um link válido.");
+      }
+
+      setSucesso(true);
+      setMensagem("Cobrança criada! Redirecionando para o pagamento...");
+
+      window.location.assign(resultado.link_pagamento);
+    } catch (erro) {
+      setSucesso(false);
+
+      setMensagem(
+        erro instanceof Error
+          ? erro.message
+          : "Ocorreu um erro ao preparar o pagamento. Tente novamente."
+      );
+
+      setPagando(false);
+    }
   }
 
   return (
@@ -211,11 +267,11 @@ export default function Home() {
                   </p>
 
                   <p className="mt-2 text-2xl font-bold text-[#987343]">
-                    ATÉ 10X SEM JUROS
+                    PARCELAMENTO EM ATÉ 10X
                   </p>
 
                   <p className="mt-1 text-xs text-[#806f63]">
-                    Consulte as condições de pagamento.
+                    Consulte as condições disponíveis no checkout.
                   </p>
                 </div>
               )}
@@ -369,11 +425,14 @@ export default function Home() {
               !data ||
               !horario ||
               carregando ||
-              !!erroAgenda
+              !!erroAgenda ||
+              pagando
             }
             className="w-full rounded-lg bg-[#987343] p-4 text-sm tracking-widest text-white transition hover:bg-[#795a35] disabled:opacity-40"
           >
-            CONTINUAR PARA PAGAMENTO
+            {pagando
+              ? "PREPARANDO PAGAMENTO..."
+              : "CONTINUAR PARA PAGAMENTO"}
           </button>
 
           <p className="mt-5 text-center text-xs leading-5 text-[#98877a]">
