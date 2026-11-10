@@ -77,8 +77,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (pedido.evento_google_id && pedido.status === "agendado") {
-      return NextResponse.json({ recebido: true });
+    // Se já foi concluído, não cria outro compromisso.
+    if (pedido.status === "agendado" && pedido.evento_google_id) {
+      return NextResponse.json({
+        recebido: true,
+        pagamento_confirmado: true,
+        agendamento_confirmado: true,
+      });
+    }
+
+    if (
+      pedido.status !== "pendente" &&
+      pedido.status !== "pago"
+    ) {
+      return NextResponse.json(
+        { erro: "Pedido não está disponível para processamento." },
+        { status: 409 }
+      );
     }
 
     // Confirma o pagamento diretamente com a InfinitePay.
@@ -117,7 +132,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Só processamos pedidos da agenda da Monique.
     if (pedido.profissional !== "Dra. Monique Gomes") {
       throw new Error("Profissional não habilitada.");
     }
@@ -143,31 +157,29 @@ export async function POST(request: NextRequest) {
       if (!atualizacao.ok) {
         throw new Error("Falha ao registrar o pagamento.");
       }
-    } else if (
-      pedido.status !== "pago" ||
-      pedido.transaction_nsu !== transactionNsu
-    ) {
+
+      const atualizados = await atualizacao.json();
+
+      if (!atualizados.length) {
+        const conferir = await fetch(
+          `${supabaseUrl}/rest/v1/agendamentos_pagamentos?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=status,transaction_nsu`,
+          { headers, cache: "no-store" }
+        );
+
+        const estado = (await conferir.json())[0];
+
+        if (
+          estado?.status !== "pago" ||
+          estado?.transaction_nsu !== transactionNsu
+        ) {
+          throw new Error("Não foi possível registrar o pagamento.");
+        }
+      }
+    } else if (pedido.transaction_nsu !== transactionNsu) {
       return NextResponse.json(
-        { erro: "Pedido não pode ser processado." },
+        { erro: "Transação diferente da registrada no pedido." },
         { status: 409 }
       );
-    }
-
-    // Pagamento posterior ao vencimento: não marca automaticamente.
-    if (
-      !pedido.expira_em ||
-      new Date(pedido.expira_em).getTime() <= Date.now()
-    ) {
-      console.error(
-        "PAGAMENTO APROVADO COM RESERVA EXPIRADA:",
-        orderNsu
-      );
-
-      return NextResponse.json({
-        recebido: true,
-        pagamento_confirmado: true,
-        agendamento_pendente_de_verificacao: true,
-      });
     }
 
     // Impede dois processamentos simultâneos do mesmo pedido.
@@ -190,20 +202,15 @@ export async function POST(request: NextRequest) {
     const podeProcessar = await processamento.json();
 
     if (podeProcessar !== true) {
-      return NextResponse.json({ recebido: true });
+      return NextResponse.json(
+        { erro: "Pedido em processamento. Tente novamente." },
+        { status: 409 }
+      );
     }
 
     try {
-      const [ano, mes, dia] = pedido.data_agendamento
-        .split("-")
-        .map(Number);
-
-      const [hora, minuto] = pedido.horario
-        .split(":")
-        .map(Number);
-
       const inicio = new Date(
-        `${pedido.data_agendamento}T${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}:00-03:00`
+        `${pedido.data_agendamento}T${pedido.horario}:00-03:00`
       );
 
       const fim = new Date(
@@ -212,69 +219,10 @@ export async function POST(request: NextRequest) {
 
       if (
         !Number.isFinite(inicio.getTime()) ||
+        !Number.isFinite(fim.getTime()) ||
         inicio.getTime() <= Date.now()
       ) {
         throw new Error("O horário reservado já passou.");
-      }
-
-      // Confere novamente se a reserva ainda está válida.
-      const reservaAtual = await fetch(
-        `${supabaseUrl}/rest/v1/agendamentos_pagamentos?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=status,expira_em,evento_google_id`,
-        {
-          headers,
-          cache: "no-store",
-        }
-      );
-
-      if (!reservaAtual.ok) {
-        throw new Error("Não foi possível conferir a reserva.");
-      }
-
-      const dadosReserva = (await reservaAtual.json())[0];
-
-      if (
-        !dadosReserva ||
-        dadosReserva.status !== "pago" ||
-        dadosReserva.evento_google_id ||
-        !dadosReserva.expira_em ||
-        new Date(dadosReserva.expira_em).getTime() <= Date.now()
-      ) {
-        throw new Error("A reserva expirou ou não está disponível.");
-      }
-
-      // Verifica outros agendamentos ativos no banco.
-      const reservasResponse = await fetch(
-        `${supabaseUrl}/rest/v1/agendamentos_pagamentos?data_agendamento=eq.${encodeURIComponent(pedido.data_agendamento)}&select=order_nsu,horario,duracao,status,expira_em&or=${encodeURIComponent(`(status.eq.pago,status.eq.agendado,and(status.eq.pendente,expira_em.gt.${new Date().toISOString()}))`)}`,
-        {
-          headers,
-          cache: "no-store",
-        }
-      );
-
-      if (!reservasResponse.ok) {
-        throw new Error("Falha ao verificar outras reservas.");
-      }
-
-      const reservas = await reservasResponse.json();
-
-      const conflitoBanco = reservas.some((reserva: any) => {
-        if (reserva.order_nsu === orderNsu) return false;
-
-        const [h, m] = reserva.horario.split(":").map(Number);
-
-        const outroInicio = new Date(
-          `${pedido.data_agendamento}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00-03:00`
-        );
-
-        const outroFim = new Date(
-          outroInicio.getTime() + Number(reserva.duracao) * 60000
-        );
-
-        return sobrepoe(inicio, fim, outroInicio, outroFim);
-      });
-
-      if (conflitoBanco) {
-        throw new Error("O horário foi ocupado por outra reserva.");
       }
 
       // Recupera a conexão da agenda da Monique.
@@ -321,48 +269,9 @@ export async function POST(request: NextRequest) {
         throw new Error("Não foi possível acessar o Google Agenda.");
       }
 
-      // Confere novamente a disponibilidade no Google.
-      const busyResponse = await fetch(
-        "https://www.googleapis.com/calendar/v3/freeBusy",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            timeMin: inicio.toISOString(),
-            timeMax: fim.toISOString(),
-            timeZone: "America/Sao_Paulo",
-            items: [{ id: "primary" }],
-          }),
-          cache: "no-store",
-        }
-      );
+      const accessToken = tokenData.access_token;
 
-      const busyData = await busyResponse.json();
-
-      if (!busyResponse.ok) {
-        throw new Error("Falha ao consultar disponibilidade no Google.");
-      }
-
-      const busy = busyData.calendars?.primary?.busy || [];
-
-      const conflitoGoogle = busy.some(
-        (period: { start: string; end: string }) =>
-          sobrepoe(
-            inicio,
-            fim,
-            new Date(period.start),
-            new Date(period.end)
-          )
-      );
-
-      if (conflitoGoogle) {
-        throw new Error("O horário já está ocupado no Google Agenda.");
-      }
-
-      // ID determinístico: uma nova tentativa usa o mesmo evento.
+      // ID determinístico: todas as tentativas usam o mesmo evento.
       const eventId = orderNsu
         .replace(/^LB-/i, "")
         .replace(/-/g, "")
@@ -371,34 +280,14 @@ export async function POST(request: NextRequest) {
       const eventUrl =
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`;
 
-      const eventBody = {
-        id: eventId,
-        summary: `${pedido.servico} - ${pedido.cliente_nome}`,
-        description: [
-          `Cliente: ${pedido.cliente_nome}`,
-          `Telefone: ${pedido.cliente_telefone}`,
-          `Procedimento: ${pedido.servico}`,
-          `Profissional: ${pedido.profissional}`,
-          `Pedido: ${orderNsu}`,
-          "Sinal confirmado pela InfinitePay.",
-          "Agendamento realizado pelo site La Belle Espaço.",
-        ].join("\n"),
-        start: {
-          dateTime: inicio.toISOString(),
-          timeZone: "America/Sao_Paulo",
-        },
-        end: {
-          dateTime: fim.toISOString(),
-          timeZone: "America/Sao_Paulo",
-        },
-      };
-
-      // Primeiro tenta recuperar um evento de uma tentativa anterior.
+      // PRIMEIRO: procura um evento criado em tentativa anterior.
+      // Isso evita confundir o próprio evento com um conflito de horário.
       let eventData: any = null;
+      let eventoJaExistia = false;
 
       const eventoExistente = await fetch(eventUrl, {
         headers: {
-          Authorization: `Bearer ${tokenData.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         cache: "no-store",
       });
@@ -411,34 +300,179 @@ export async function POST(request: NextRequest) {
         ) {
           throw new Error("Identificador de evento já utilizado.");
         }
-      } else if (eventoExistente.status === 404) {
+
+        eventoJaExistia = true;
+      } else if (eventoExistente.status !== 404) {
+        throw new Error("Não foi possível consultar evento existente.");
+      }
+
+      // Só verifica validade e disponibilidade se ainda não existe evento.
+      if (!eventoJaExistia) {
+        if (
+          !pedido.expira_em ||
+          new Date(pedido.expira_em).getTime() <= Date.now()
+        ) {
+          console.error(
+            "PAGAMENTO APROVADO COM RESERVA EXPIRADA:",
+            orderNsu
+          );
+
+          return NextResponse.json({
+            recebido: true,
+            pagamento_confirmado: true,
+            agendamento_pendente_de_verificacao: true,
+          });
+        }
+
+        // Confere se a reserva continua válida no banco.
+        const reservaAtual = await fetch(
+          `${supabaseUrl}/rest/v1/agendamentos_pagamentos?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=status,expira_em,evento_google_id`,
+          {
+            headers,
+            cache: "no-store",
+          }
+        );
+
+        if (!reservaAtual.ok) {
+          throw new Error("Não foi possível conferir a reserva.");
+        }
+
+        const dadosReserva = (await reservaAtual.json())[0];
+
+        if (
+          !dadosReserva ||
+          dadosReserva.status !== "pago" ||
+          dadosReserva.evento_google_id ||
+          !dadosReserva.expira_em ||
+          new Date(dadosReserva.expira_em).getTime() <= Date.now()
+        ) {
+          throw new Error("A reserva expirou ou não está disponível.");
+        }
+
+        // Verifica outros agendamentos ativos no banco.
+        const reservasResponse = await fetch(
+          `${supabaseUrl}/rest/v1/agendamentos_pagamentos?data_agendamento=eq.${encodeURIComponent(pedido.data_agendamento)}&select=order_nsu,horario,duracao,status,expira_em&or=${encodeURIComponent(`(status.eq.pago,status.eq.agendado,and(status.eq.pendente,expira_em.gt.${new Date().toISOString()}))`)}`,
+          {
+            headers,
+            cache: "no-store",
+          }
+        );
+
+        if (!reservasResponse.ok) {
+          throw new Error("Falha ao verificar outras reservas.");
+        }
+
+        const reservas = await reservasResponse.json();
+
+        const conflitoBanco = reservas.some((reserva: any) => {
+          if (reserva.order_nsu === orderNsu) return false;
+
+          const [h, m] = reserva.horario.split(":").map(Number);
+
+          const outroInicio = new Date(
+            `${pedido.data_agendamento}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00-03:00`
+          );
+
+          const outroFim = new Date(
+            outroInicio.getTime() + Number(reserva.duracao) * 60000
+          );
+
+          return sobrepoe(inicio, fim, outroInicio, outroFim);
+        });
+
+        if (conflitoBanco) {
+          throw new Error("O horário foi ocupado por outra reserva.");
+        }
+
+        // Confere disponibilidade no Google.
+        const busyResponse = await fetch(
+          "https://www.googleapis.com/calendar/v3/freeBusy",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              timeMin: inicio.toISOString(),
+              timeMax: fim.toISOString(),
+              timeZone: "America/Sao_Paulo",
+              items: [{ id: "primary" }],
+            }),
+            cache: "no-store",
+          }
+        );
+
+        const busyData = await busyResponse.json();
+
+        if (!busyResponse.ok) {
+          throw new Error("Falha ao consultar disponibilidade no Google.");
+        }
+
+        const busy = busyData.calendars?.primary?.busy || [];
+
+        const conflitoGoogle = busy.some(
+          (period: { start: string; end: string }) =>
+            sobrepoe(
+              inicio,
+              fim,
+              new Date(period.start),
+              new Date(period.end)
+            )
+        );
+
+        if (conflitoGoogle) {
+          throw new Error("O horário já está ocupado no Google Agenda.");
+        }
+
+        // Cria o compromisso somente depois de todas as verificações.
+        const eventBody = {
+          id: eventId,
+          summary: `${pedido.servico} - ${pedido.cliente_nome}`,
+          description: [
+            `Cliente: ${pedido.cliente_nome}`,
+            `Telefone: ${pedido.cliente_telefone}`,
+            `Procedimento: ${pedido.servico}`,
+            `Profissional: ${pedido.profissional}`,
+            `Pedido: ${orderNsu}`,
+            "Sinal confirmado pela InfinitePay.",
+            "Agendamento realizado pelo site La Belle Espaço.",
+          ].join("\n"),
+          start: {
+            dateTime: inicio.toISOString(),
+            timeZone: "America/Sao_Paulo",
+          },
+          end: {
+            dateTime: fim.toISOString(),
+            timeZone: "America/Sao_Paulo",
+          },
+          extendedProperties: {
+            private: {
+              order_nsu: orderNsu,
+            },
+          },
+        };
+
         const criarEvento = await fetch(
           "https://www.googleapis.com/calendar/v3/calendars/primary/events",
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${tokenData.access_token}`,
+              Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              ...eventBody,
-              extendedProperties: {
-                private: {
-                  order_nsu: orderNsu,
-                },
-              },
-            }),
+            body: JSON.stringify(eventBody),
           }
         );
 
         eventData = await criarEvento.json();
 
         if (!criarEvento.ok) {
-          // Outra tentativa pode ter criado o mesmo evento.
+          // Se outra tentativa criou o mesmo evento, recupera-o.
           if (criarEvento.status === 409) {
             const recuperar = await fetch(eventUrl, {
               headers: {
-                Authorization: `Bearer ${tokenData.access_token}`,
+                Authorization: `Bearer ${accessToken}`,
               },
               cache: "no-store",
             });
@@ -450,8 +484,7 @@ export async function POST(request: NextRequest) {
             eventData = await recuperar.json();
 
             if (
-              eventData.extendedProperties?.private?.order_nsu !==
-              orderNsu
+              eventData.extendedProperties?.private?.order_nsu !== orderNsu
             ) {
               throw new Error("Evento existente não corresponde ao pedido.");
             }
@@ -459,8 +492,10 @@ export async function POST(request: NextRequest) {
             throw new Error("Não foi possível criar o compromisso.");
           }
         }
-      } else {
-        throw new Error("Não foi possível consultar evento existente.");
+      }
+
+      if (!eventData?.id) {
+        throw new Error("O Google não retornou o identificador do evento.");
       }
 
       // Salva o evento e conclui o agendamento.
@@ -495,6 +530,10 @@ export async function POST(request: NextRequest) {
             cache: "no-store",
           }
         );
+
+        if (!confirmar.ok) {
+          throw new Error("Falha ao confirmar o agendamento no banco.");
+        }
 
         const estado = (await confirmar.json())[0];
 
