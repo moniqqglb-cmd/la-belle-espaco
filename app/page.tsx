@@ -27,7 +27,6 @@ const servicos = [
 function converterPreco(preco: string) {
   const valor = preco.match(/R\$\s*([\d.]+,\d{2})/);
   if (!valor) return 0;
-
   return Number(valor[1].replace(/\./g, "").replace(",", "."));
 }
 
@@ -49,14 +48,14 @@ export default function Home() {
   const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erroAgenda, setErroAgenda] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [mensagem, setMensagem] = useState("");
+  const [sucesso, setSucesso] = useState(false);
 
   const escolhido = servicos.find((s) => s.nome === servico);
   const injetavel = escolhido?.categoria === "Injetáveis";
 
-  const precoNumerico = escolhido
-    ? converterPreco(escolhido.preco)
-    : 0;
-
+  const precoNumerico = escolhido ? converterPreco(escolhido.preco) : 0;
   const permiteParcelamento = precoNumerico > 200;
 
   const valorParcela = permiteParcelamento
@@ -97,9 +96,7 @@ export default function Home() {
 
         setHorariosDisponiveis(resultado.available || []);
       } catch (erro) {
-        if (erro instanceof Error && erro.name === "AbortError") {
-          return;
-        }
+        if (erro instanceof Error && erro.name === "AbortError") return;
 
         setErroAgenda(
           "Não foi possível consultar a agenda. Tente novamente."
@@ -116,12 +113,63 @@ export default function Home() {
     return () => controller.abort();
   }, [data, servico, profissional, duracao]);
 
-  function enviarAgendamento(e: React.FormEvent) {
+  async function enviarAgendamento(e: React.FormEvent) {
     e.preventDefault();
+    setMensagem("");
+    setSucesso(false);
 
-    alert(
-      "A consulta de disponibilidade está funcionando. A confirmação e a criação do compromisso ainda serão integradas."
-    );
+    if (injetavel) {
+      setMensagem(
+        "Os procedimentos injetáveis estarão disponíveis assim que o pagamento do sinal de 20% estiver integrado."
+      );
+      return;
+    }
+
+    setEnviando(true);
+
+    try {
+      const resposta = await fetch("/api/agenda/agendar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          service: servico,
+          date: data,
+          time: horario,
+          name: nome,
+          phone: telefone,
+          duration,
+        }),
+      });
+
+      const resultado = await resposta.json();
+
+      if (!resposta.ok) {
+        throw new Error(
+          resultado.erro || "Não foi possível realizar o agendamento."
+        );
+      }
+
+      setSucesso(true);
+      setMensagem(
+        "Agendamento realizado! Seu horário foi registrado no Google Agenda da Dra. Monique."
+      );
+
+      setHorario("");
+      setNome("");
+      setTelefone("");
+    } catch (erro) {
+      setMensagem(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível concluir o agendamento."
+      );
+
+      setSucesso(false);
+    } finally {
+      setEnviando(false);
+    }
   }
 
   return (
@@ -130,9 +178,7 @@ export default function Home() {
         <p className="mb-2 text-xs tracking-[0.4em] text-[#d8b77b]">
           BELEZA • CUIDADO • BEM-ESTAR
         </p>
-        <h1 className="text-4xl font-light tracking-widest">
-          LA BELLE
-        </h1>
+        <h1 className="text-4xl font-light tracking-widest">LA BELLE</h1>
         <p className="mt-2 text-sm tracking-[0.25em] text-[#d8b77b]">
           ESPAÇO
         </p>
@@ -173,6 +219,7 @@ export default function Home() {
             onChange={(e) => {
               setServico(e.target.value);
               setHorario("");
+              setMensagem("");
             }}
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           >
@@ -193,19 +240,15 @@ export default function Home() {
                   <p className="text-xs tracking-widest text-[#806f63]">
                     PARCELAMENTO NO CARTÃO
                   </p>
-
                   <p className="mt-1 text-2xl font-bold text-[#987343]">
                     10x de aproximadamente {moeda(valorParcela)}
                   </p>
-
                   <p className="mt-1 font-semibold text-[#987343]">
                     SEM JUROS
                   </p>
-
                   <p className="mt-2 text-xs text-[#806f63]">
                     Valor total: {escolhido.preco}
                   </p>
-
                   <p className="mt-1 text-xs text-[#806f63]">
                     A última parcela poderá ter ajuste de centavos.
                   </p>
@@ -217,8 +260,7 @@ export default function Home() {
               )}
 
               <p className="mt-3 text-[#806f63]">
-                Duração prevista:{" "}
-                {duracao === 110 ? "1h50" : "1 hora"}
+                Duração prevista: {duracao === 110 ? "1h50" : "1 hora"}
               </p>
 
               {injetavel && (
@@ -260,6 +302,7 @@ export default function Home() {
             onChange={(e) => {
               setData(e.target.value);
               setHorario("");
+              setMensagem("");
             }}
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           />
@@ -328,6 +371,19 @@ export default function Home() {
             className="mb-7 w-full rounded-lg border border-[#dfd4c8] p-3"
           />
 
+          {mensagem && (
+            <div
+              role="status"
+              className={`mb-5 rounded-lg p-4 text-sm ${
+                sucesso
+                  ? "bg-green-50 text-green-800"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              {mensagem}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={
@@ -336,17 +392,18 @@ export default function Home() {
               !data ||
               !horario ||
               carregando ||
+              enviando ||
               !!erroAgenda
             }
             className="w-full rounded-lg bg-[#987343] p-4 text-sm tracking-widest text-white transition hover:bg-[#795a35] disabled:opacity-40"
           >
-            CONTINUAR AGENDAMENTO
+            {enviando ? "REGISTRANDO..." : "CONTINUAR AGENDAMENTO"}
           </button>
 
           <p className="mt-5 text-center text-xs leading-5 text-[#98877a]">
             Atendimento de terça a sábado, das 08h às 20h.
             <br />
-            A confirmação automática será ativada na próxima etapa.
+            Procedimentos injetáveis dependem da integração do pagamento.
           </p>
         </form>
       </section>
