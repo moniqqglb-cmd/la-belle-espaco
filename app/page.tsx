@@ -254,9 +254,11 @@ export default function Home() {
           BELEZA • CUIDADO • BEM-ESTAR
         </p>
 
-        <h1 className="mt-3 text-4xl font-light tracking-[0.2em]">
-          LA BELLE
-        </h1>
+        <img
+  src="/logo-la-belle.jpg"
+  alt="La Belle Espaço"
+  className="mx-auto mt-4 w-full max-w-[280px] rounded-xl"
+/>
 
         <p className="mt-1 text-sm tracking-[0.4em]">ESPAÇO</p>
 
