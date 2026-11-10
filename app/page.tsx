@@ -134,12 +134,19 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#fcfaf7] text-[#40332b]">
       <header className="bg-[#30251f] px-5 py-8 text-center text-[#eee2d5]">
-        <p className="text-xs tracking-[0.3em]">BELEZA • CUIDADO • BEM-ESTAR</p>
+        <p className="text-xs tracking-[0.3em]">
+          BELEZA • CUIDADO • BEM-ESTAR
+        </p>
+
         <h1 className="mt-3 text-4xl font-light tracking-[0.2em]">
           LA BELLE
         </h1>
+
         <p className="mt-1 text-sm tracking-[0.4em]">ESPAÇO</p>
-        <p className="mt-4 text-sm">Sua beleza merece esse cuidado.</p>
+
+        <p className="mt-4 text-sm">
+          Sua beleza merece esse cuidado.
+        </p>
       </header>
 
       <section className="mx-auto max-w-4xl px-5 py-12 text-center">
@@ -196,6 +203,22 @@ export default function Home() {
               <p className="mt-2 font-semibold text-[#987343]">
                 Valor total: {escolhido.preco}
               </p>
+
+              {valorTotal !== null && (
+                <div className="mt-4 rounded-xl border-2 border-[#c5a36b] bg-[#fffaf0] p-4 text-center">
+                  <p className="text-xs font-semibold tracking-[0.2em] text-[#806f63]">
+                    FACILIDADE PARA VOCÊ
+                  </p>
+
+                  <p className="mt-2 text-2xl font-bold text-[#987343]">
+                    ATÉ 10X SEM JUROS
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#806f63]">
+                    Consulte as condições de pagamento.
+                  </p>
+                </div>
+              )}
 
               {valorTotal !== null && sinal !== null && restante !== null ? (
                 <div className="mt-4 border-t border-[#e5d8c7] pt-4">
@@ -363,6 +386,7 @@ export default function Home() {
 
       <footer className="bg-[#30251f] px-5 py-8 text-center text-sm text-[#eee2d5]">
         <p className="tracking-widest">LA BELLE ESPAÇO</p>
+
         <p className="mt-2 text-xs text-[#c9b9a8]">
           Um momento de cuidado pensado para você.
         </p>
