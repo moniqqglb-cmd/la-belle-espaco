@@ -3,27 +3,26 @@
 import { useEffect, useState } from "react";
 
 const servicos = [
-  { nome: "Drenagem linfática", preco: "R$ 119,99", categoria: "Corporal" },
-  { nome: "Massagem modeladora", preco: "R$ 139,99", categoria: "Corporal" },
-  { nome: "Secagem de vasinhos", preco: "R$ 89,99", categoria: "Corporal" },
-  { nome: "Corrente russa", preco: "R$ 39,99", categoria: "Corporal" },
-  { nome: "Carboxiterapia", preco: "R$ 399,99 / pacote", categoria: "Corporal" },
-  { nome: "Limpeza de pele", preco: "R$ 149,99", categoria: "Facial" },
-  { nome: "Preenchimento labial", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Botox", preco: "R$ 899,99", categoria: "Injetáveis" },
-  { nome: "Bigode chinês", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Rinomodelação", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Preenchimento de olheiras", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Preenchimento mandíbula", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Preenchimento mento", preco: "R$ 899,99 / ml", categoria: "Injetáveis" },
-  { nome: "Bioestimulador de colágeno", preco: "R$ 1.200,00", categoria: "Facial" },
-  { nome: "Peeling químico", preco: "R$ 180,00", categoria: "Facial" },
-  { nome: "Peeling de diamante", preco: "R$ 49,99", categoria: "Facial" },
-  { nome: "Skinbooster", preco: "R$ 350,00 / pacote", categoria: "Facial" },
-  { nome: "Depilação a laser", preco: "Consulte", categoria: "Corporal" },
-  { nome: "Enzimas", preco: "Consulte", categoria: "Corporal" },
+  { nome: "Drenagem linfática", preco: "R$ 119,99", valor: 119.99, categoria: "Corporal", sinal: true },
+  { nome: "Massagem modeladora", preco: "R$ 139,99", valor: 139.99, categoria: "Corporal", sinal: true },
+  { nome: "Secagem de vasinhos", preco: "R$ 89,99", valor: 89.99, categoria: "Corporal", sinal: true },
+  { nome: "Corrente russa", preco: "R$ 39,99", valor: 39.99, categoria: "Corporal", sinal: true },
+  { nome: "Carboxiterapia", preco: "R$ 399,99 / pacote", valor: 399.99, categoria: "Corporal", sinal: true },
+  { nome: "Limpeza de pele", preco: "R$ 149,99", valor: 149.99, categoria: "Facial", sinal: true },
+  { nome: "Preenchimento labial", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Botox", preco: "R$ 899,99", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Bigode chinês", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Rinomodelação", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Preenchimento de olheiras", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Preenchimento mandíbula", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Preenchimento mento", preco: "R$ 899,99 / ml", valor: 899.99, categoria: "Injetáveis", sinal: true },
+  { nome: "Bioestimulador de colágeno", preco: "R$ 1.500,00", valor: 1500, categoria: "Facial", sinal: true },
+  { nome: "Peeling químico", preco: "R$ 180,00", valor: 180, categoria: "Facial", sinal: true },
+  { nome: "Peeling de diamante", preco: "R$ 49,99", valor: 49.99, categoria: "Facial", sinal: true },
+  { nome: "Skinbooster", preco: "R$ 350,00 / pacote", valor: 350, categoria: "Facial", sinal: true },
+  { nome: "Depilação a laser", preco: "Consulte", valor: null, categoria: "Corporal", sinal: true },
+  { nome: "Enzimas", preco: "Consulte", valor: null, categoria: "Corporal", sinal: true },
 ];
-
 function converterPreco(preco: string) {
   const valor = preco.match(/R\$\s*([\d.]+,\d{2})/);
   if (!valor) return 0;
