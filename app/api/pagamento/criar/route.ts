@@ -337,11 +337,13 @@ export async function POST(request: NextRequest) {
       ).catch(() => null);
     }
 
-    return NextResponse.json(
-      {
-        erro: "Não foi possível iniciar o pagamento. Tente novamente.",
-      },
-      { status: 500 }
-    );
-  }
-}
+   const detalhe =
+  error instanceof Error ? error.message : String(error);
+
+return NextResponse.json(
+  {
+    erro: "Não foi possível iniciar o pagamento.",
+    detalhe,
+  },
+  { status: 500 }
+);
