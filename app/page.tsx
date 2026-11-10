@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const servicos = [
   { nome: "Drenagem linfática", preco: "R$ 119,99", categoria: "Corporal" },
@@ -24,20 +24,11 @@ const servicos = [
   { nome: "Enzimas", preco: "Consulte", categoria: "Corporal" },
 ];
 
-const horarios = [
-  "08:00", "09:00", "10:00", "11:00",
-  "12:00", "13:00", "14:00", "15:00",
-  "16:00", "17:00", "18:00", "19:00",
-];
-
 function converterPreco(preco: string) {
   const valor = preco.match(/R\$\s*([\d.]+,\d{2})/);
-
   if (!valor) return 0;
 
-  return Number(
-    valor[1].replace(/\./g, "").replace(",", ".")
-  );
+  return Number(valor[1].replace(/\./g, "").replace(",", "."));
 }
 
 function moeda(valor: number) {
@@ -49,11 +40,15 @@ function moeda(valor: number) {
 
 export default function Home() {
   const [servico, setServico] = useState("");
-  const [profissional, setProfissional] = useState("");
+  const [profissional, setProfissional] = useState("Dra. Monique Gomes");
   const [data, setData] = useState("");
   const [horario, setHorario] = useState("");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
+
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erroAgenda, setErroAgenda] = useState("");
 
   const escolhido = servicos.find((s) => s.nome === servico);
   const injetavel = escolhido?.categoria === "Injetáveis";
@@ -68,10 +63,64 @@ export default function Home() {
     ? Math.round((precoNumerico / 10) * 100) / 100
     : 0;
 
+  const duracao = servico === "Limpeza de pele" ? 110 : 60;
+
+  useEffect(() => {
+    if (!data || !servico || !profissional) {
+      setHorariosDisponiveis([]);
+      setHorario("");
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function consultarAgenda() {
+      setCarregando(true);
+      setErroAgenda("");
+      setHorariosDisponiveis([]);
+      setHorario("");
+
+      try {
+        const resposta = await fetch(
+          `/api/agenda/disponibilidade?date=${data}&duration=${duracao}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+          throw new Error(resultado.erro || "Erro ao consultar agenda.");
+        }
+
+        setHorariosDisponiveis(resultado.available || []);
+      } catch (erro) {
+        if (erro instanceof Error && erro.name === "AbortError") {
+          return;
+        }
+
+        setErroAgenda(
+          "Não foi possível consultar a agenda. Tente novamente."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setCarregando(false);
+        }
+      }
+    }
+
+    consultarAgenda();
+
+    return () => controller.abort();
+  }, [data, servico, profissional, duracao]);
+
   function enviarAgendamento(e: React.FormEvent) {
     e.preventDefault();
+
     alert(
-      "Esta é uma prévia do site. A integração com Google Agenda e pagamentos será ativada nas próximas etapas."
+      "A consulta de disponibilidade está funcionando. A confirmação e a criação do compromisso ainda serão integradas."
     );
   }
 
@@ -121,7 +170,10 @@ export default function Home() {
           <select
             required
             value={servico}
-            onChange={(e) => setServico(e.target.value)}
+            onChange={(e) => {
+              setServico(e.target.value);
+              setHorario("");
+            }}
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           >
             <option value="">Selecione um procedimento</option>
@@ -166,7 +218,7 @@ export default function Home() {
 
               <p className="mt-3 text-[#806f63]">
                 Duração prevista:{" "}
-                {servico === "Limpeza de pele" ? "1h50" : "1 hora"}
+                {duracao === 110 ? "1h50" : "1 hora"}
               </p>
 
               {injetavel && (
@@ -185,17 +237,12 @@ export default function Home() {
           <select
             required
             value={profissional}
-            onChange={(e) => setProfissional(e.target.value)}
+            onChange={(e) => {
+              setProfissional(e.target.value);
+              setHorario("");
+            }}
             className="mb-6 w-full rounded-lg border border-[#dfd4c8] bg-white p-3"
           >
-            <option value="">Selecione a profissional</option>
-
-            {(!servico ||
-              servico === "Drenagem linfática" ||
-              servico === "Massagem modeladora") && (
-              <option value="Beatriz">Beatriz</option>
-            )}
-
             <option value="Dra. Monique Gomes">
               Dra. Monique Gomes
             </option>
@@ -218,25 +265,44 @@ export default function Home() {
           />
 
           <label className="mb-3 block text-sm">
-            4. Escolha o horário
+            4. Horários disponíveis
           </label>
 
-          <div className="mb-6 grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {horarios.map((h) => (
-              <button
-                type="button"
-                key={h}
-                onClick={() => setHorario(h)}
-                className={`rounded-lg border p-3 text-sm ${
-                  horario === h
-                    ? "border-[#987343] bg-[#987343] text-white"
-                    : "border-[#dfd4c8] bg-white hover:bg-[#f8f3eb]"
-                }`}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
+          {!data || !servico ? (
+            <p className="mb-6 rounded-lg bg-[#f8f3eb] p-4 text-sm text-[#806f63]">
+              Escolha primeiro o procedimento e a data para consultar
+              os horários.
+            </p>
+          ) : carregando ? (
+            <p className="mb-6 rounded-lg bg-[#f8f3eb] p-4 text-sm text-[#806f63]">
+              Consultando a agenda da Monique...
+            </p>
+          ) : erroAgenda ? (
+            <p className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">
+              {erroAgenda}
+            </p>
+          ) : horariosDisponiveis.length === 0 ? (
+            <p className="mb-6 rounded-lg bg-[#f8f3eb] p-4 text-sm text-[#806f63]">
+              Não há horários disponíveis nesta data. Escolha outro dia.
+            </p>
+          ) : (
+            <div className="mb-6 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {horariosDisponiveis.map((h) => (
+                <button
+                  type="button"
+                  key={h}
+                  onClick={() => setHorario(h)}
+                  className={`rounded-lg border p-3 text-sm ${
+                    horario === h
+                      ? "border-[#987343] bg-[#987343] text-white"
+                      : "border-[#dfd4c8] bg-white hover:bg-[#f8f3eb]"
+                  }`}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          )}
 
           <label className="mb-2 block text-sm">
             5. Seu nome
@@ -264,7 +330,14 @@ export default function Home() {
 
           <button
             type="submit"
-            disabled={!servico || !profissional || !data || !horario}
+            disabled={
+              !servico ||
+              !profissional ||
+              !data ||
+              !horario ||
+              carregando ||
+              !!erroAgenda
+            }
             className="w-full rounded-lg bg-[#987343] p-4 text-sm tracking-widest text-white transition hover:bg-[#795a35] disabled:opacity-40"
           >
             CONTINUAR AGENDAMENTO
@@ -273,7 +346,7 @@ export default function Home() {
           <p className="mt-5 text-center text-xs leading-5 text-[#98877a]">
             Atendimento de terça a sábado, das 08h às 20h.
             <br />
-            Agendamentos sujeitos à confirmação.
+            A confirmação automática será ativada na próxima etapa.
           </p>
         </form>
       </section>
