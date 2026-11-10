@@ -62,7 +62,7 @@ export default function Home() {
     ? Math.round((precoNumerico / 10) * 100) / 100
     : 0;
 
-  const duracao = servico === "Limpeza de pele" ? 110 : 60;
+  const duration = servico === "Limpeza de pele" ? 110 : 60;
 
   useEffect(() => {
     if (!data || !servico || !profissional) {
