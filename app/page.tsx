@@ -45,7 +45,65 @@ export default function Home() {
   const [erroAgenda, setErroAgenda] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sucesso, setSucesso] = useState(false);
+  useEffect(() => {
+  async function confirmarRetornoPagamento() {
+    const params = new URLSearchParams(window.location.search);
 
+    const orderNsu = params.get("order_nsu");
+    const transactionNsu = params.get("transaction_nsu");
+    const slug = params.get("slug");
+
+    if (!orderNsu || !transactionNsu || !slug) {
+      return;
+    }
+
+    setPagando(true);
+    setMensagem("Pagamento recebido! Confirmando seu agendamento...");
+
+    try {
+      const resposta = await fetch("/api/pagamento/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          order_nsu: orderNsu,
+          transaction_nsu: transactionNsu,
+          invoice_slug: slug,
+        }),
+      });
+
+      const resultado = await resposta.json();
+
+      if (!resposta.ok) {
+        throw new Error(
+          resultado.erro || "Não foi possível confirmar o agendamento."
+        );
+      }
+
+      if (resultado.agendamento_confirmado === true) {
+        setSucesso(true);
+        setMensagem("Pagamento confirmado! Seu agendamento foi realizado com sucesso.");
+      } else {
+        setSucesso(false);
+        setMensagem(
+          "Pagamento recebido e confirmado. Seu agendamento ainda precisa ser verificado pela clínica."
+        );
+      }
+    } catch (erro) {
+      setSucesso(false);
+      setMensagem(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível confirmar seu agendamento."
+      );
+    } finally {
+      setPagando(false);
+    }
+  }
+
+  confirmarRetornoPagamento();
+}, []);
   const escolhido = servicos.find((s) => s.nome === servico);
   const duracao = servico === "Limpeza de pele" ? 110 : 60;
   const valorTotal = escolhido?.valor ?? null;
