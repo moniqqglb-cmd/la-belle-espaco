@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from “next/server”;
-import { randomUUID } from “crypto”;
+import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
-export const dynamic = “force-dynamic”;
+export const dynamic = "force-dynamic";
 
 const SERVICOS: Record<string, { preco: number; duracao: number }> = {
 “Drenagem linfática”: { preco: 11999, duracao: 60 },
