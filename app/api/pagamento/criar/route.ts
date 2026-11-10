@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 
+export const dynamic = "force-dynamic";
+
 const SERVICOS: Record<string, { preco: number; duracao: number }> = {
   "Drenagem linfática": { preco: 11999, duracao: 60 },
   "Massagem modeladora": { preco: 13999, duracao: 60 },
@@ -22,6 +24,10 @@ const SERVICOS: Record<string, { preco: number; duracao: number }> = {
 };
 
 export async function POST(request: NextRequest) {
+  let supabaseUrl = "";
+  let supabaseKey = "";
+  let orderNsu = "";
+
   try {
     const body = await request.json();
 
@@ -32,9 +38,16 @@ export async function POST(request: NextRequest) {
     const data = String(body.data || "").trim();
     const horario = String(body.horario || "").trim();
 
-    if (!nome || !telefone || !servico || !profissional || !data || !horario) {
+    if (
+      nome.length < 2 ||
+      nome.length > 100 ||
+      telefone.length < 8 ||
+      telefone.length > 30 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(data) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(horario)
+    ) {
       return NextResponse.json(
-        { erro: "Preencha todos os dados do agendamento." },
+        { erro: "Confira os dados do agendamento." },
         { status: 400 }
       );
     }
@@ -43,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     if (!item) {
       return NextResponse.json(
-        { erro: "Serviço não encontrado ou sem preço cadastrado." },
+        { erro: "Serviço sem preço cadastrado." },
         { status: 400 }
       );
     }
@@ -60,68 +73,118 @@ export async function POST(request: NextRequest) {
       !["Drenagem linfática", "Massagem modeladora"].includes(servico)
     ) {
       return NextResponse.json(
-        { erro: "Esse serviço não está disponível com essa profissional." },
+        { erro: "Serviço indisponível com essa profissional." },
+        { status: 400 }
+      );
+    }
+
+    const [ano, mes, dia] = data.split("-").map(Number);
+    const dataValida = new Date(Date.UTC(ano, mes - 1, dia));
+
+    if (
+      dataValida.getUTCFullYear() !== ano ||
+      dataValida.getUTCMonth() !== mes - 1 ||
+      dataValida.getUTCDate() !== dia
+    ) {
+      return NextResponse.json(
+        { erro: "Data inválida." },
+        { status: 400 }
+      );
+    }
+
+    const diaSemana = dataValida.getUTCDay();
+    const [hora, minuto] = horario.split(":").map(Number);
+    const inicioMinutos = hora * 60 + minuto;
+    const fimMinutos = inicioMinutos + item.duracao;
+
+    if (
+      diaSemana === 0 ||
+      diaSemana === 1 ||
+      inicioMinutos < 480 ||
+      fimMinutos > 1200 ||
+      inicioMinutos % 30 !== 0
+    ) {
+      return NextResponse.json(
+        { erro: "Data ou horário fora do funcionamento." },
         { status: 400 }
       );
     }
 
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(data) ||
-      !/^([01]\d|2[0-3]):[0-5]\d$/.test(horario)
+      profissional === "Beatriz" &&
+      !(
+        (diaSemana >= 2 && diaSemana <= 5 && inicioMinutos >= 780) ||
+        (diaSemana === 6 && inicioMinutos >= 480)
+      )
     ) {
       return NextResponse.json(
-        { erro: "Data ou horário inválido." },
+        { erro: "Horário indisponível para Beatriz." },
         { status: 400 }
       );
     }
 
-    const sinal = Math.round(item.preco * 0.20);
-    const orderNsu = `LB-${randomUUID()}`;
+    const inicio = new Date(`${data}T${horario}:00-03:00`);
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const infinitePayKey = process.env.INFINITEPAY_API_KEY;
-
-    if (!supabaseUrl || !supabaseKey || !infinitePayKey) {
+    if (inicio.getTime() <= Date.now()) {
       return NextResponse.json(
-        { erro: "Configuração do servidor incompleta." },
-        { status: 500 }
+        { erro: "Escolha um horário futuro." },
+        { status: 400 }
       );
     }
 
-    const registro = await fetch(
-      `${supabaseUrl}/rest/v1/agendamentos_pagamentos`,
+    supabaseUrl = process.env.SUPABASE_URL || "";
+    supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    const infinitePayKey = process.env.INFINITEPAY_API_KEY || "";
+
+    if (!supabaseUrl || !supabaseKey || !infinitePayKey) {
+      throw new Error("Configuração do servidor incompleta.");
+    }
+
+    orderNsu = `LB-${randomUUID()}`;
+    const sinal = Math.round(item.preco * 0.2);
+
+    const headers = {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      "Content-Type": "application/json",
+    };
+
+    // Reserva o horário por 15 minutos no banco.
+    const reserva = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/criar_reserva_pendente`,
       {
         method: "POST",
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
+        headers,
         body: JSON.stringify({
-          order_nsu: orderNsu,
-          cliente_nome: nome,
-          cliente_telefone: telefone,
-          servico,
-          profissional,
-          data_agendamento: data,
-          horario,
-          duracao: item.duracao,
-          valor_total_centavos: item.preco,
-          sinal_centavos: sinal,
-          status: "pendente",
+          p_order_nsu: orderNsu,
+          p_cliente_nome: nome,
+          p_cliente_telefone: telefone,
+          p_servico: servico,
+          p_profissional: profissional,
+          p_data: data,
+          p_horario: horario,
+          p_duracao: item.duracao,
+          p_valor_total: item.preco,
+          p_sinal: sinal,
         }),
+        cache: "no-store",
       }
     );
 
-    if (!registro.ok) {
+    const resultadoReserva = await reserva.json();
+
+    if (!reserva.ok) {
+      throw new Error("Não foi possível reservar o horário.");
+    }
+
+    if (resultadoReserva.sucesso !== true) {
       return NextResponse.json(
-        { erro: "Não foi possível registrar o pedido." },
-        { status: 500 }
+        { erro: resultadoReserva.erro || "Esse horário não está disponível." },
+        { status: 409 }
       );
     }
 
+    // Cria a cobrança na InfinitePay.
     const checkout = await fetch(
       "https://api.checkout.infinitepay.io/links",
       {
@@ -151,7 +214,7 @@ export async function POST(request: NextRequest) {
           options: {
             assured_installments: 10,
             valid_until: new Date(
-              Date.now() + 24 * 60 * 60 * 1000
+              Date.now() + 15 * 60 * 1000
             ).toISOString(),
           },
         }),
@@ -166,10 +229,7 @@ export async function POST(request: NextRequest) {
       resultado.link;
 
     if (!checkout.ok || !link) {
-      return NextResponse.json(
-        { erro: "A InfinitePay não conseguiu gerar a cobrança." },
-        { status: 502 }
-      );
+      throw new Error("A InfinitePay não conseguiu gerar a cobrança.");
     }
 
     return NextResponse.json({
@@ -179,9 +239,30 @@ export async function POST(request: NextRequest) {
       valor_sinal: sinal,
       valor_restante: item.preco - sinal,
     });
-  } catch {
+  } catch (error) {
+    console.error("Erro ao criar cobrança:", error);
+
+    // Se a cobrança falhar, libera a reserva.
+    if (orderNsu && supabaseUrl && supabaseKey) {
+      await fetch(
+        `${supabaseUrl}/rest/v1/agendamentos_pagamentos?order_nsu=eq.${encodeURIComponent(orderNsu)}&status=eq.pendente`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: "cancelado",
+            atualizado_em: new Date().toISOString(),
+          }),
+        }
+      ).catch(() => null);
+    }
+
     return NextResponse.json(
-      { erro: "Erro interno ao criar a cobrança." },
+      { erro: "Não foi possível iniciar o pagamento. Tente novamente." },
       { status: 500 }
     );
   }
