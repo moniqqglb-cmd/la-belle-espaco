@@ -4,12 +4,18 @@ import { randomBytes } from "crypto";
 export async function GET(request: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
 
-  if (!clientId) {
-    return NextResponse.json(
-      { erro: "Configuração do Google não encontrada." },
-      { status: 500 }
-    );
-  }
+  if (!supabaseResponse.ok) {
+  const detalhes = await supabaseResponse.text();
+
+  return NextResponse.json(
+    {
+      erro: "Não foi possível salvar a autorização no banco.",
+      status: supabaseResponse.status,
+      detalhes,
+    },
+    { status: 500 }
+  );
+}
 
   const state = randomBytes(32).toString("hex");
 
