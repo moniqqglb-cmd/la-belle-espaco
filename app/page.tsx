@@ -1,6 +1,6 @@
-“use client”;
+"use client";
 
-import { useEffect, useState } from “react”;
+import { useEffect, useState } from "react";
 
 const servicos = [
 { nome: “Drenagem linfática”, preco: “R$ 119,99”, valor: 119.99, categoria: “Corporal” },
