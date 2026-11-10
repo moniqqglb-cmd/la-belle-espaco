@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get("code");
+    const error = request.nextUrl.searchParams.get("error");
     const state = request.nextUrl.searchParams.get("state");
     const savedState = request.cookies.get("google_oauth_state")?.value;
-    const error = request.nextUrl.searchParams.get("error");
 
     if (error || !code) {
       return NextResponse.json(
@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
 
     if (!state || !savedState || state !== savedState) {
       return NextResponse.json(
-        { erro: "Validação de segurança falhou. Tente novamente." },
-        { status: 403 }
+        { erro: "Validação de segurança da autorização falhou. Tente novamente." },
+        { status: 400 }
       );
     }
 
@@ -43,10 +43,24 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json();
 
-    if (!tokenResponse.ok || !tokens.refresh_token) {
+    if (!tokenResponse.ok) {
       return NextResponse.json(
-        { erro: "Não foi possível obter a autorização permanente." },
+        { erro: "Falha ao obter autorização do Google." },
         { status: 400 }
+      );
+    }
+
+    if (!tokens.refresh_token) {
+      return NextResponse.json(
+        { erro: "O Google não forneceu um refresh token. Tente autorizar novamente." },
+        { status: 400 }
+      );
+    }
+
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { erro: "Configuração do Supabase incompleta na Vercel." },
+        { status: 500 }
       );
     }
 
@@ -55,8 +69,8 @@ export async function GET(request: NextRequest) {
       {
         method: "POST",
         headers: {
-          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
           "Content-Type": "application/json",
           Prefer: "resolution=merge-duplicates,return=minimal",
         },
@@ -69,8 +83,14 @@ export async function GET(request: NextRequest) {
     );
 
     if (!supabaseResponse.ok) {
+      const detalhes = await supabaseResponse.text();
+
       return NextResponse.json(
-        { erro: "Não foi possível salvar a autorização no banco." },
+        {
+          erro: "Não foi possível salvar a autorização no banco.",
+          status: supabaseResponse.status,
+          detalhes,
+        },
         { status: 500 }
       );
     }
