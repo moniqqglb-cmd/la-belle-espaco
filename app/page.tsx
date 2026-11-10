@@ -1,7 +1,5 @@
 "use client";
-
 import { useEffect, useState, type FormEvent } from "react";
-
 const servicos = [
   { nome: "Drenagem linfática", preco: "R$ 119,99", valor: 119.99 },
   { nome: "Massagem modeladora", preco: "R$ 139,99", valor: 139.99 },
@@ -23,14 +21,12 @@ const servicos = [
   { nome: "Depilação a laser", preco: "Consulte", valor: null },
   { nome: "Enzimas", preco: "Consulte", valor: null },
 ];
-
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 }
-
 export default function Home() {
   const [servico, setServico] = useState("");
   const [profissional, setProfissional] = useState("Dra. Monique Gomes");
@@ -44,19 +40,15 @@ export default function Home() {
   const [erroAgenda, setErroAgenda] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sucesso, setSucesso] = useState(false);
-
   useEffect(() => {
     async function confirmarRetornoPagamento() {
       const params = new URLSearchParams(window.location.search);
       const orderNsu = params.get("order_nsu");
       const transactionNsu = params.get("transaction_nsu");
       const slug = params.get("slug");
-
       if (!orderNsu || !transactionNsu || !slug) return;
-
       setPagando(true);
       setMensagem("Pagamento recebido! Confirmando seu agendamento...");
-
       try {
         const resposta = await fetch("/api/pagamento/webhook", {
           method: "POST",
@@ -67,15 +59,12 @@ export default function Home() {
             invoice_slug: slug,
           }),
         });
-
         const resultado = await resposta.json();
-
         if (!resposta.ok) {
           throw new Error(
             resultado.erro || "Não foi possível confirmar o agendamento."
           );
         }
-
         if (resultado.agendamento_confirmado === true) {
           setSucesso(true);
           setMensagem(
@@ -98,39 +87,31 @@ export default function Home() {
         setPagando(false);
       }
     }
-
     confirmarRetornoPagamento();
   }, []);
-
   const escolhido = servicos.find((s) => s.nome === servico);
   const duracao = servico === "Limpeza de pele" ? 110 : 60;
   const valorTotal = escolhido?.valor ?? null;
-
   const sinal =
     valorTotal !== null
       ? Math.round(valorTotal * 100 * 0.2) / 100
       : null;
-
   const restante =
     valorTotal !== null && sinal !== null
       ? Math.round((valorTotal - sinal) * 100) / 100
       : null;
-
   useEffect(() => {
     if (!data || !servico || !profissional) {
       setHorariosDisponiveis([]);
       setHorario("");
       return;
     }
-
     const controller = new AbortController();
-
     async function consultarAgenda() {
       setCarregando(true);
       setErroAgenda("");
       setHorariosDisponiveis([]);
       setHorario("");
-
       try {
         const resposta = await fetch(
           `/api/agenda/disponibilidade?date=${data}&duration=${duracao}`,
@@ -139,17 +120,13 @@ export default function Home() {
             signal: controller.signal,
           }
         );
-
         const resultado = await resposta.json();
-
         if (!resposta.ok) {
           throw new Error(resultado.erro || "Erro ao consultar agenda.");
         }
-
         setHorariosDisponiveis(resultado.available || []);
       } catch (erro) {
         if (erro instanceof Error && erro.name === "AbortError") return;
-
         setErroAgenda(
           "Não foi possível consultar a agenda. Tente novamente."
         );
@@ -159,40 +136,30 @@ export default function Home() {
         }
       }
     }
-
     consultarAgenda();
-
     return () => controller.abort();
   }, [data, servico, profissional, duracao]);
-
   async function enviarAgendamento(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
     if (pagando) return;
-
     setSucesso(false);
     setMensagem("");
-
     if (!escolhido) {
       setMensagem("Escolha um procedimento.");
       return;
     }
-
     if (valorTotal === null || sinal === null) {
       setMensagem(
         "Entre em contato com a clínica para consultar o valor e o sinal deste procedimento."
       );
       return;
     }
-
     if (!horario || !data || !nome.trim() || !telefone.trim()) {
       setMensagem("Preencha todos os dados e escolha um horário.");
       return;
     }
-
     setPagando(true);
     setMensagem("Preparando sua cobrança na InfinitePay...");
-
     try {
       const resposta = await fetch("/api/pagamento/criar", {
         method: "POST",
@@ -206,9 +173,7 @@ export default function Home() {
           horario,
         }),
       });
-
       const resultado = await resposta.json();
-
       if (!resposta.ok) {
         throw new Error(
           `${resultado.erro || "Não foi possível criar a cobrança."} ${
@@ -216,17 +181,14 @@ export default function Home() {
           }`
         );
       }
-
       if (
         !resultado.link_pagamento ||
         typeof resultado.link_pagamento !== "string"
       ) {
         throw new Error("A InfinitePay não retornou um link válido.");
       }
-
       setSucesso(true);
       setMensagem("Cobrança criada! Redirecionando para o pagamento...");
-
       window.location.assign(resultado.link_pagamento);
     } catch (erro) {
       setSucesso(false);
@@ -235,55 +197,45 @@ export default function Home() {
           ? erro.message
           : "Ocorreu um erro ao preparar o pagamento. Tente novamente."
       );
-
       setPagando(false);
     }
   }
-
   return (
     <main className="min-h-screen overflow-hidden bg-[#fff8ed] text-[#492d1c]">
-
-      {/* BANNER PRINCIPAL */}
-      <header className="relative flex w-full items-center justify-center overflow-hidden border-b border-[#d9b777] bg-gradient-to-r from-[#d8b77d] via-[#fff0d3] to-[#d8b77d] px-3 py-5 sm:py-7">
+      {/* BANNER PRINCIPAL COM LOGO */}
+      <header className="relative flex w-full items-center justify-center overflow-hidden border-b border-[#d9b777] bg-gradient-to-r from-[#d8b77d] via-[#fff0d3] to-[#d8b77d] px-3 py-2 sm:py-3">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,255,255,0.8),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.7),transparent_30%)]" />
-
         <div className="absolute inset-0 opacity-40 bg-[linear-gradient(120deg,transparent_25%,rgba(255,255,255,0.5)_45%,transparent_60%)]" />
-
         <img
           src="/logo-la-belle.jpg"
           alt="La Belle Espaço"
-          className="relative z-10 h-auto w-[230px] max-w-full object-contain sm:w-[290px] md:w-[340px]"
+          className="relative z-10 h-auto w-[180px] max-w-full object-contain sm:w-[230px] md:w-[260px]"
         />
       </header>
-
       {/* APRESENTAÇÃO */}
-      <section className="mx-auto max-w-5xl px-5 pb-7 pt-8 text-center sm:pt-10">
-        <div className="mb-3 flex items-center justify-center gap-4">
+      <section className="mx-auto max-w-5xl px-5 pb-3 pt-4 text-center sm:pt-5">
+        <div className="mb-2 flex items-center justify-center gap-4">
           <span className="h-px w-12 bg-[#bd8b43] sm:w-20" />
           <p className="text-xs font-medium tracking-[0.35em] text-[#79502b] sm:text-sm">
             SEJA BEM-VINDA
           </p>
           <span className="h-px w-12 bg-[#bd8b43] sm:w-20" />
         </div>
-
         <h2 className="font-serif text-3xl font-normal leading-tight text-[#492d1c] sm:text-5xl">
           Seu momento de cuidado começa aqui
         </h2>
-
-        <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-[#765a43] sm:text-xl">
+        <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-[#765a43] sm:text-xl">
           Escolha seu procedimento, profissional e horário.
           <br className="hidden sm:block" />
           Preparamos cada detalhe para cuidar de você.
         </p>
-
-        <div className="mt-5 flex items-center justify-center gap-3 text-[#bd8b43]">
+        <div className="mt-3 flex items-center justify-center gap-3 text-[#bd8b43]">
           <span className="h-px w-16 bg-[#d9b777]" />
           <span className="text-2xl">✧</span>
           <span className="h-px w-16 bg-[#d9b777]" />
         </div>
       </section>
-
-      {/* FORMULÁRIO */}
+      {/* FORMULÁRIO DE AGENDAMENTO */}
       <section className="mx-auto max-w-4xl px-4 pb-12 sm:px-6">
         <form
           onSubmit={enviarAgendamento}
@@ -293,18 +245,14 @@ export default function Home() {
             <p className="text-xs font-medium tracking-[0.35em] text-[#b17b30]">
               LA BELLE ESPAÇO
             </p>
-
             <h3 className="mt-2 font-serif text-3xl text-[#492d1c] sm:text-4xl">
               Faça seu agendamento
             </h3>
-
             <div className="mx-auto mt-4 h-px w-32 bg-gradient-to-r from-transparent via-[#bd8b43] to-transparent" />
           </div>
-
           <label className="mb-2 block text-base font-semibold text-[#593a25]">
             1. Escolha o procedimento
           </label>
-
           <select
             required
             value={servico}
@@ -322,47 +270,38 @@ export default function Home() {
               </option>
             ))}
           </select>
-
           {escolhido && (
             <div className="mb-6 rounded-2xl border border-[#ead9bb] bg-[#fff8ed] p-5 text-sm">
               <p className="text-[#65472f]">
                 Procedimento: <strong>{escolhido.nome}</strong>
               </p>
-
               <p className="mt-2 text-lg font-semibold text-[#a8752d]">
                 Valor total: {escolhido.preco}
               </p>
-
               {valorTotal !== null && (
                 <div className="mt-4 rounded-xl border border-[#e2c28d] bg-[#fffaf1] p-4 text-center">
                   <p className="text-xs font-semibold tracking-[0.2em] text-[#806f63]">
                     FACILIDADE PARA VOCÊ
                   </p>
-
                   <p className="mt-2 text-xl font-bold text-[#a8752d] sm:text-2xl">
                     PARCELAMENTO EM ATÉ 10X
                   </p>
-
                   <p className="mt-1 text-xs text-[#806f63]">
                     Consulte as condições disponíveis no checkout.
                   </p>
                 </div>
               )}
-
               {valorTotal !== null && sinal !== null && restante !== null ? (
                 <div className="mt-5 border-t border-[#e5d8c7] pt-4">
                   <p className="text-xs font-semibold tracking-widest text-[#806f63]">
                     SINAL OBRIGATÓRIO DE 20%
                   </p>
-
                   <p className="mt-2 text-3xl font-bold text-[#a8752d]">
                     {moeda(sinal)}
                   </p>
-
                   <p className="mt-2 text-[#806f63]">
                     Restante a pagar no atendimento: {moeda(restante)}
                   </p>
-
                   <p className="mt-3 text-xs leading-5 text-[#806f63]">
                     O horário será confirmado após a aprovação do pagamento do sinal.
                   </p>
@@ -372,17 +311,14 @@ export default function Home() {
                   O valor e o sinal de 20% precisam ser confirmados pela clínica.
                 </p>
               )}
-
               <p className="mt-3 text-[#806f63]">
                 Duração prevista: {duracao === 110 ? "1h50" : "1 hora"}
               </p>
             </div>
           )}
-
           <label className="mb-2 block text-base font-semibold text-[#593a25]">
             2. Escolha a profissional
           </label>
-
           <select
             required
             value={profissional}
@@ -396,11 +332,9 @@ export default function Home() {
               Dra. Monique Gomes
             </option>
           </select>
-
           <label className="mb-2 block text-base font-semibold text-[#593a25]">
             3. Escolha a data
           </label>
-
           <input
             required
             type="date"
@@ -413,11 +347,9 @@ export default function Home() {
             }}
             className="mb-5 w-full rounded-xl border border-[#d9b99b] bg-[#fffdfa] p-4 text-base outline-none transition focus:border-[#bd8b43] focus:ring-2 focus:ring-[#e9d2a9]"
           />
-
           <label className="mb-3 block text-base font-semibold text-[#593a25]">
             4. Horários disponíveis
           </label>
-
           {!data || !servico ? (
             <p className="mb-6 rounded-xl bg-[#f8e9d0] p-5 text-sm leading-6 text-[#65472f]">
               Escolha primeiro o procedimento e a data para consultar os horários.
@@ -452,11 +384,9 @@ export default function Home() {
               ))}
             </div>
           )}
-
           <label className="mb-2 block text-base font-semibold text-[#593a25]">
             5. Seu nome
           </label>
-
           <input
             required
             value={nome}
@@ -464,11 +394,9 @@ export default function Home() {
             placeholder="Digite seu nome completo"
             className="mb-5 w-full rounded-xl border border-[#d9b99b] bg-[#fffdfa] p-4 text-base outline-none transition focus:border-[#bd8b43] focus:ring-2 focus:ring-[#e9d2a9]"
           />
-
           <label className="mb-2 block text-base font-semibold text-[#593a25]">
             Seu WhatsApp
           </label>
-
           <input
             required
             value={telefone}
@@ -476,7 +404,6 @@ export default function Home() {
             placeholder="(00) 00000-0000"
             className="mb-6 w-full rounded-xl border border-[#d9b99b] bg-[#fffdfa] p-4 text-base outline-none transition focus:border-[#bd8b43] focus:ring-2 focus:ring-[#e9d2a9]"
           />
-
           {mensagem && (
             <div
               role="status"
@@ -489,7 +416,6 @@ export default function Home() {
               {mensagem}
             </div>
           )}
-
           <button
             type="submit"
             disabled={
@@ -507,7 +433,6 @@ export default function Home() {
               ? "PREPARANDO PAGAMENTO..."
               : "CONTINUAR PARA PAGAMENTO  →"}
           </button>
-
           <div className="mt-6 flex flex-col items-center justify-center gap-2 border-t border-[#ead9bb] pt-5 text-center text-xs leading-5 text-[#80634b] sm:flex-row sm:gap-3">
             <span className="text-xl text-[#a8752d]">◷</span>
             <p>
@@ -518,20 +443,16 @@ export default function Home() {
           </div>
         </form>
       </section>
-
       {/* RODAPÉ */}
       <footer className="border-t border-[#dfc69e] bg-gradient-to-r from-[#f2dfc1] via-[#fff3df] to-[#f2dfc1] px-5 py-7 text-center text-[#6b4c35]">
         <div className="mx-auto mb-3 h-px max-w-48 bg-[#c9a36c]" />
-
         <p className="text-sm font-medium tracking-[0.35em]">
           LA BELLE ESPAÇO
         </p>
-
         <p className="mt-2 font-serif text-base italic text-[#80634b]">
           Um momento de cuidado pensado para você.
         </p>
       </footer>
-
       {/* WHATSAPP FLUTUANTE */}
       <a
         href="https://wa.me/5511923667255?text=Ol%C3%A1!%20Gostaria%20de%20mais%20informa%C3%A7%C3%B5es%20sobre%20os%20procedimentos."
