@@ -45,65 +45,69 @@ export default function Home() {
   const [erroAgenda, setErroAgenda] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [sucesso, setSucesso] = useState(false);
+
   useEffect(() => {
-  async function confirmarRetornoPagamento() {
-    const params = new URLSearchParams(window.location.search);
+    async function confirmarRetornoPagamento() {
+      const params = new URLSearchParams(window.location.search);
 
-    const orderNsu = params.get("order_nsu");
-    const transactionNsu = params.get("transaction_nsu");
-    const slug = params.get("slug");
+      const orderNsu = params.get("order_nsu");
+      const transactionNsu = params.get("transaction_nsu");
+      const slug = params.get("slug");
 
-    if (!orderNsu || !transactionNsu || !slug) {
-      return;
-    }
-
-    setPagando(true);
-    setMensagem("Pagamento recebido! Confirmando seu agendamento...");
-
-    try {
-      const resposta = await fetch("/api/pagamento/webhook", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          order_nsu: orderNsu,
-          transaction_nsu: transactionNsu,
-          invoice_slug: slug,
-        }),
-      });
-
-      const resultado = await resposta.json();
-
-      if (!resposta.ok) {
-        throw new Error(
-          resultado.erro || "Não foi possível confirmar o agendamento."
-        );
+      if (!orderNsu || !transactionNsu || !slug) {
+        return;
       }
 
-      if (resultado.agendamento_confirmado === true) {
-        setSucesso(true);
-        setMensagem("Pagamento confirmado! Seu agendamento foi realizado com sucesso.");
-      } else {
+      setPagando(true);
+      setMensagem("Pagamento recebido! Confirmando seu agendamento...");
+
+      try {
+        const resposta = await fetch("/api/pagamento/webhook", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            order_nsu: orderNsu,
+            transaction_nsu: transactionNsu,
+            invoice_slug: slug,
+          }),
+        });
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+          throw new Error(
+            resultado.erro || "Não foi possível confirmar o agendamento."
+          );
+        }
+
+        if (resultado.agendamento_confirmado === true) {
+          setSucesso(true);
+          setMensagem(
+            "Pagamento confirmado! Seu agendamento foi realizado com sucesso."
+          );
+        } else {
+          setSucesso(false);
+          setMensagem(
+            "Pagamento recebido e confirmado. Seu agendamento ainda precisa ser verificado pela clínica."
+          );
+        }
+      } catch (erro) {
         setSucesso(false);
         setMensagem(
-          "Pagamento recebido e confirmado. Seu agendamento ainda precisa ser verificado pela clínica."
+          erro instanceof Error
+            ? erro.message
+            : "Não foi possível confirmar seu agendamento."
         );
+      } finally {
+        setPagando(false);
       }
-    } catch (erro) {
-      setSucesso(false);
-      setMensagem(
-        erro instanceof Error
-          ? erro.message
-          : "Não foi possível confirmar seu agendamento."
-      );
-    } finally {
-      setPagando(false);
     }
-  }
 
-  confirmarRetornoPagamento();
-}, []);
+    confirmarRetornoPagamento();
+  }, []);
+
   const escolhido = servicos.find((s) => s.nome === servico);
   const duracao = servico === "Limpeza de pele" ? 110 : 60;
   const valorTotal = escolhido?.valor ?? null;
@@ -249,20 +253,19 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#fcfaf7] text-[#40332b]">
-      <header className="bg-[#30251f] px-5 py-8 text-center text-[#eee2d5]">
-        <p className="text-xs tracking-[0.3em]">
+      {/* NOVO CABEÇALHO LA BELLE */}
+      <header className="bg-[#f4eadb] px-5 py-7 text-center text-[#6b4c35]">
+        <p className="text-xs font-medium tracking-[0.3em]">
           BELEZA • CUIDADO • BEM-ESTAR
         </p>
 
         <img
-  src="/logo-la-belle.jpg"
-  alt="La Belle Espaço"
-  className="mx-auto mt-4 w-full max-w-[280px] rounded-xl"
-/>
+          src="/logo-la-belle.jpg"
+          alt="La Belle Espaço"
+          className="mx-auto mt-4 w-full max-w-[340px] object-contain"
+        />
 
-        <p className="mt-1 text-sm tracking-[0.4em]">ESPAÇO</p>
-
-        <p className="mt-4 text-sm">
+        <p className="mt-3 text-sm text-[#80634b]">
           Sua beleza merece esse cuidado.
         </p>
       </header>
