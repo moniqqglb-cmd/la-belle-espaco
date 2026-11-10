@@ -20,6 +20,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const [year, month, day] = date.split("-").map(Number);
+    const validDate = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      validDate.getUTCFullYear() !== year ||
+      validDate.getUTCMonth() !== month - 1 ||
+      validDate.getUTCDate() !== day
+    ) {
+      return NextResponse.json(
+        { erro: "Data inválida." },
+        { status: 400 }
+      );
+    }
+
+    const weekday = validDate.getUTCDay();
+
+    if (weekday === 0 || weekday === 1) {
+      return NextResponse.json({ date, available: [] });
+    }
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -27,7 +47,34 @@ export async function GET(request: NextRequest) {
       throw new Error("Configuração do banco incompleta.");
     }
 
-    const dbResponse = await fetch(
+    // Consulta os horários temporariamente reservados ou já pagos.
+    const dbUrl = new URL(
+      `${supabaseUrl}/rest/v1/agendamentos_pagamentos`
+    );
+
+    dbUrl.searchParams.set("select", "horario,duracao,status,expira_em");
+    dbUrl.searchParams.set("data_agendamento", `eq.${date}`);
+    dbUrl.searchParams.set(
+      "or",
+      `(status.eq.pago,status.eq.agendado,and(status.eq.pendente,expira_em.gt.${new Date().toISOString()}))`
+    );
+
+    const reservationsResponse = await fetch(dbUrl.toString(), {
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!reservationsResponse.ok) {
+      throw new Error("Não foi possível consultar as reservas.");
+    }
+
+    const reservations = await reservationsResponse.json();
+
+    // Consulta a conexão da agenda da Monique.
+    const tokenResponseDb = await fetch(
       `${supabaseUrl}/rest/v1/google_calendar_tokens?id=eq.monique&select=refresh_token`,
       {
         headers: {
@@ -38,12 +85,12 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    if (!dbResponse.ok) {
+    if (!tokenResponseDb.ok) {
       throw new Error("Não foi possível consultar a conexão do Google.");
     }
 
-    const rows = await dbResponse.json();
-    const refreshToken = rows[0]?.refresh_token;
+    const tokenRows = await tokenResponseDb.json();
+    const refreshToken = tokenRows[0]?.refresh_token;
 
     if (!refreshToken) {
       throw new Error("Agenda da Monique não está conectada.");
@@ -101,16 +148,13 @@ export async function GET(request: NextRequest) {
 
     const busy = busyData.calendars?.primary?.busy || [];
 
-    const [year, month, day] = date.split("-").map(Number);
-    const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-
-    if (weekday === 0 || weekday === 1) {
-      return NextResponse.json({ date, available: [] });
-    }
-
     const available: string[] = [];
 
-    for (let minutes = 8 * 60; minutes + duration <= 20 * 60; minutes += 30) {
+    for (
+      let minutes = 8 * 60;
+      minutes + duration <= 20 * 60;
+      minutes += 30
+    ) {
       const hour = Math.floor(minutes / 60);
       const minute = minutes % 60;
 
@@ -122,14 +166,44 @@ export async function GET(request: NextRequest) {
         slotStart.getTime() + duration * 60 * 1000
       );
 
-      const overlaps = busy.some((period: { start: string; end: string }) => {
-        const busyStart = new Date(period.start);
-        const busyEnd = new Date(period.end);
+      const googleConflict = busy.some(
+        (period: { start: string; end: string }) => {
+          const busyStart = new Date(period.start);
+          const busyEnd = new Date(period.end);
 
-        return slotStart < busyEnd && slotEnd > busyStart;
-      });
+          return slotStart < busyEnd && slotEnd > busyStart;
+        }
+      );
 
-      if (!overlaps && slotStart.getTime() > Date.now()) {
+      const databaseConflict = reservations.some(
+        (reservation: {
+          horario: string;
+          duracao: number;
+        }) => {
+          const [reservedHour, reservedMinute] =
+            reservation.horario.split(":").map(Number);
+
+          const reservationStart = new Date(
+            `${date}T${String(reservedHour).padStart(2, "0")}:${String(reservedMinute).padStart(2, "0")}:00-03:00`
+          );
+
+          const reservationEnd = new Date(
+            reservationStart.getTime() +
+              reservation.duracao * 60 * 1000
+          );
+
+          return (
+            slotStart < reservationEnd &&
+            slotEnd > reservationStart
+          );
+        }
+      );
+
+      if (
+        !googleConflict &&
+        !databaseConflict &&
+        slotStart.getTime() > Date.now()
+      ) {
         available.push(
           `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
         );
