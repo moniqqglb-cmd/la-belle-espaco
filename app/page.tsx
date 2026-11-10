@@ -159,7 +159,9 @@ export default function Home() {
 
       if (!resposta.ok) {
         throw new Error(
-          resultado.erro || "Não foi possível criar a cobrança."
+          `${resultado.erro || "Não foi possível criar a cobrança."} ${
+            resultado.detalhe || ""
+          }`
         );
       }
 
