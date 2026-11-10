@@ -6,12 +6,11 @@ export async function POST(request: NextRequest) {
 
     const orderNsu = String(body.order_nsu || "");
     const transactionNsu = String(body.transaction_nsu || "");
-    const slug = String(body.invoice_slug || body.slug || "");
-    const evento = String(body.event || "paid");
+    const slug = String(body.invoice_slug || "");
 
     if (!orderNsu || !transactionNsu || !slug) {
       return NextResponse.json(
-        { erro: "Dados de pagamento incompletos." },
+        { erro: "Identificadores do pagamento incompletos." },
         { status: 400 }
       );
     }
@@ -21,12 +20,7 @@ export async function POST(request: NextRequest) {
     const infinitePayKey = process.env.INFINITEPAY_API_KEY;
     const infinitePayHandle = process.env.INFINITEPAY_HANDLE;
 
-    if (
-      !supabaseUrl ||
-      !supabaseKey ||
-      !infinitePayKey ||
-      !infinitePayHandle
-    ) {
+    if (!supabaseUrl || !supabaseKey || !infinitePayKey || !infinitePayHandle) {
       return NextResponse.json(
         { erro: "Configuração do servidor incompleta." },
         { status: 500 }
@@ -46,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     if (!consulta.ok) {
       return NextResponse.json(
-        { erro: "Não foi possível consultar o pedido." },
+        { erro: "Falha ao consultar o pedido." },
         { status: 500 }
       );
     }
@@ -62,10 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (pedido.status !== "pendente") {
-      return NextResponse.json({
-        recebido: true,
-        mensagem: "Pedido já processado.",
-      });
+      return NextResponse.json({ recebido: true });
     }
 
     const verificacao = await fetch(
@@ -87,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     if (!verificacao.ok) {
       return NextResponse.json(
-        { erro: "Falha ao verificar pagamento." },
+        { erro: "Falha na verificação da InfinitePay." },
         { status: 502 }
       );
     }
@@ -100,7 +91,7 @@ export async function POST(request: NextRequest) {
       Number(pagamento.amount) !== Number(pedido.sinal_centavos)
     ) {
       return NextResponse.json(
-        { erro: "Pagamento não confirmado ou valor divergente." },
+        { erro: "Pagamento não confirmado ou valor incorreto." },
         { status: 400 }
       );
     }
@@ -123,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     if (!atualizacao.ok) {
       return NextResponse.json(
-        { erro: "Não foi possível atualizar o pedido." },
+        { erro: "Falha ao atualizar o pedido." },
         { status: 500 }
       );
     }
@@ -131,11 +122,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       recebido: true,
       pagamento_confirmado: true,
-      mensagem: "Pagamento confirmado. Pedido aguardando agendamento.",
     });
   } catch {
     return NextResponse.json(
-      { erro: "Erro interno ao processar confirmação." },
+      { erro: "Erro interno ao processar o pagamento." },
       { status: 500 }
     );
   }
